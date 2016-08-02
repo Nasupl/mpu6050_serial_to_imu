@@ -27,6 +27,7 @@ int main(int argc, char** argv)
   std::string tf_frame_id;
   std::string imu_frame_id;
   double time_offset_in_seconds;
+  bool broadcast_tf;
 
   tf::Quaternion orientation;
   tf::Quaternion zero_orientation;
@@ -41,6 +42,7 @@ int main(int argc, char** argv)
   private_node_handle.param<std::string>("tf_frame_id", tf_frame_id, "imu");
   private_node_handle.param<std::string>("imu_frame_id", imu_frame_id, "imu_base");
   private_node_handle.param<double>("time_offset_in_seconds", time_offset_in_seconds, 0.0);
+  private_node_handle.param<bool>("broadcast_tf", broadcast_tf, true);
 
   ros::NodeHandle nh;
   ros::Publisher imu_pub = nh.advertise<sensor_msgs::Imu>("imu", 50);
@@ -76,7 +78,7 @@ int main(int argc, char** argv)
             }
 
             // parse line, get quaternion values
-            if (input.compare(0,2,"$\x02") == 0 && (input.size() == 14))
+            if (input.compare(0,2,"$\x02") == 0 && (input.size() == 20))
             {
               uint w = (((0xff &(char)input[2]) << 8) | 0xff &(char)input[3]);
               ROS_DEBUG("w = %04x", w );
@@ -90,10 +92,38 @@ int main(int argc, char** argv)
               uint z = (((0xff &(char)input[8]) << 8) | 0xff &(char)input[9]);
               ROS_DEBUG("z = %04x", z );
 
+              uint ax = (((0xff &(char)input[10]) << 8) | 0xff &(char)input[11]);
+              ROS_DEBUG("ax = %04x", ax );
+
+              uint ay = (((0xff &(char)input[12]) << 8) | 0xff &(char)input[13]);
+              ROS_DEBUG("ay = %04x", ay);
+
+              uint az = (((0xff &(char)input[14]) << 8) | 0xff &(char)input[15]);
+              ROS_DEBUG("az = %04x", az );
+
               double wf = w/16384.0;
               double xf = x/16384.0;
               double yf = y/16384.0;
               double zf = z/16384.0;
+
+              if(ax >= 32768)
+              {
+                ax = -65535 + ax;
+              }
+
+              if(ay >= 32768)
+              {
+                ay = -65535 + ay;
+              }
+
+              if(az >= 32768)
+              {
+                az = -65535 + az;
+              }
+
+              double axf = (double)ax/8092*9.81;
+              double ayf = (double)ay/8092*9.81;
+              double azf = (double)az/8092*9.81;
 
               if (wf >= 2.0)
               {
@@ -137,6 +167,11 @@ int main(int argc, char** argv)
 
               quaternionTFToMsg(differential_rotation, imu.orientation);
 
+              // publish acceleration
+              imu.linear_acceleration.x = axf;
+              imu.linear_acceleration.y = ayf;
+              imu.linear_acceleration.z = azf;
+
               // i do not know the orientation covariance
               imu.orientation_covariance[0] = 0;
               imu.orientation_covariance[1] = 0;
@@ -152,15 +187,17 @@ int main(int argc, char** argv)
               imu.angular_velocity_covariance[0] = -1;
 
               // linear acceleration is not provided
-              imu.linear_acceleration_covariance[0] = -1;
+              imu.linear_acceleration_covariance[0] = 0;
 
               imu_pub.publish(imu);
 
               // publish tf transform
-              static tf::TransformBroadcaster br;
-              tf::Transform transform;
-              transform.setRotation(differential_rotation);
-              br.sendTransform(tf::StampedTransform(transform, measurement_time, tf_parent_frame_id, tf_frame_id));
+              if (broadcast_tf){
+                static tf::TransformBroadcaster br;
+                tf::Transform transform;
+                transform.setRotation(differential_rotation);
+                br.sendTransform(tf::StampedTransform(transform, measurement_time, tf_parent_frame_id, tf_frame_id));
+              }
             }
           }
           else
