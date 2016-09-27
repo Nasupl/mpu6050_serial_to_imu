@@ -5,6 +5,8 @@
 #include <std_msgs/String.h>
 #include <std_srvs/Empty.h>
 #include <string>
+#define _USE_MATH_DEFINES
+#include <math.h>
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_datatypes.h>
 
@@ -78,7 +80,7 @@ int main(int argc, char** argv)
             }
 
             // parse line, get quaternion values
-            if (input.compare(0,2,"$\x02") == 0 && (input.size() == 20))
+            if (input.compare(0,2,"$\x02") == 0 && (input.size() == 26))
             {
               uint w = (((0xff &(char)input[2]) << 8) | 0xff &(char)input[3]);
               ROS_DEBUG("w = %04x", w );
@@ -92,34 +94,32 @@ int main(int argc, char** argv)
               uint z = (((0xff &(char)input[8]) << 8) | 0xff &(char)input[9]);
               ROS_DEBUG("z = %04x", z );
 
-              uint ax = (((0xff &(char)input[10]) << 8) | 0xff &(char)input[11]);
+              int16_t ax = (((0xff &(char)input[10]) << 8) | 0xff &(char)input[11]);
               ROS_DEBUG("ax = %04x", ax );
 
-              uint ay = (((0xff &(char)input[12]) << 8) | 0xff &(char)input[13]);
+              int16_t ay = (((0xff &(char)input[12]) << 8) | 0xff &(char)input[13]);
               ROS_DEBUG("ay = %04x", ay);
 
-              uint az = (((0xff &(char)input[14]) << 8) | 0xff &(char)input[15]);
+              int16_t az = (((0xff &(char)input[14]) << 8) | 0xff &(char)input[15]);
               ROS_DEBUG("az = %04x", az );
+
+              int16_t gx = (((0xff &(char)input[16]) << 8) | 0xff &(char)input[17]);
+              ROS_DEBUG("gx = %04x", gx );
+
+              int16_t gy = (((0xff &(char)input[18]) << 8) | 0xff &(char)input[19]);
+              ROS_DEBUG("gy = %04x", gy );
+
+              int16_t gz = (((0xff &(char)input[20]) << 8) | 0xff &(char)input[21]);
+              ROS_DEBUG("gz = %04x", gz );
 
               double wf = w/16384.0;
               double xf = x/16384.0;
               double yf = y/16384.0;
               double zf = z/16384.0;
 
-              if(ax >= 32768)
-              {
-                ax = -65535 + ax;
-              }
-
-              if(ay >= 32768)
-              {
-                ay = -65535 + ay;
-              }
-
-              if(az >= 32768)
-              {
-                az = -65535 + az;
-              }
+              double gxf = ((double)gx/131.068)*(M_PI/180.0);
+              double gyf = ((double)gy/131.068)*(M_PI/180.0);
+              double gzf = ((double)gz/131.068)*(M_PI/180.0);
 
               double axf = (double)ax/8092*9.81;
               double ayf = (double)ay/8092*9.81;
@@ -184,7 +184,9 @@ int main(int argc, char** argv)
               imu.orientation_covariance[8] = 0;
 
               // angular velocity is not provided
-              imu.angular_velocity_covariance[0] = -1;
+              imu.angular_velocity_covariance[0] = 0;
+
+              imu.angular_velocity.x = gxf;            imu.angular_velocity.y = gyf;            imu.angular_velocity.z = gzf;
 
               // linear acceleration is not provided
               imu.linear_acceleration_covariance[0] = 0;
@@ -248,4 +250,3 @@ int main(int argc, char** argv)
     r.sleep();
   }
 }
-
